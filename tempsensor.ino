@@ -3,6 +3,7 @@
 #include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
 #include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
 #include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+#include <Ticker.h>
 
 int pin_in = A0;
 int pin_en = 16;
@@ -14,6 +15,8 @@ int pin_d8 = 2;
 const int numberOfPorts = 8;
 
 float temperatures[16];
+
+Ticker ticker;
 
 std::unique_ptr<ESP8266WebServer> server;
 
@@ -47,32 +50,40 @@ void setup() {
   pinMode(pin_d4, OUTPUT);
   pinMode(pin_d8, OUTPUT);
 
+  ticker.attach(0.5, poll);
   
   Serial.println("All ready.");
 }
 
-int i = 0, zero = 0;
+int i = 0, zero = 0, phase=0;
+
+void poll() {
+  switch(phase) {
+    case 0:
+      setPort(i);
+      phase = 1;
+      break;
+    case 1:
+      int temp = analogRead(pin_in);
+      if(i == 0) {
+        zero = temp;
+      } else {
+        temp -= zero;
+        temperatures[i] = ((float)temp) * 100 / 1024;
+      }
+      phase = 2;
+      break;
+    case 2:
+      i++;
+      if(i > numberOfPorts) {
+        i = 0;
+      }
+      phase = 0;
+      break;
+  }
+}
 
 void loop() {
-  setPort(i);
-  delay(500);
-  int temp = analogRead(pin_in);
-  //Serial.println(temp);
-  if(i == 0) {
-    zero = temp;
-  } else {
-    temp -= zero;
-    temperatures[i] = ((float)temp) * 100 / 1024;
-    Serial.print(i);
-    Serial.print(" -> ");
-    Serial.println( temperatures[i] );
-  }
-  delay(500);
-  i++;
-  if(i > numberOfPorts) {
-    i = 0;
-  }
-
   server->handleClient();
 }
 
